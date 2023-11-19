@@ -1,9 +1,7 @@
 __config() -> {
   'stay_loaded' -> true,
   'commands' -> {
-    'generate_map <from> <to> <water_level> <water_block>' -> '_generate_map',
-    'raise_area <from> <to> <water_level>' -> '_raise_area',
-    'set_area <from> <to> <water_block>' -> '_set_area',
+    'generate_map <from> <to> <water_block>' -> '_generate_map',
     'switch' -> '_switch'
   },
   'arguments' -> {
@@ -12,12 +10,6 @@ __config() -> {
     },
     'to' -> {
       'type' -> 'pos'
-    },
-    'water_level' -> { 
-      'type' -> 'int', 
-      'min' -> 128, 
-      'max' -> 255, 
-      'suggest' -> [128]
     },
     'water_block' -> { 
       'type' -> 'block', 
@@ -28,7 +20,7 @@ __config() -> {
 
 // note: top() is always a block above, hence '- 1'
 
-_generate_map(pos1,pos2,water_level,water_block) -> (
+_generate_map(pos1,pos2,water_block) -> (
   if (pos1:1 != pos2:1,
     __error('Map boundaries must be on the same Y-level.');
   );
@@ -40,102 +32,68 @@ _generate_map(pos1,pos2,water_level,water_block) -> (
 
   // for each block of the map
   volume(pos1, pos2,
-    position = pos(_);
-  );
+    pos_nether = pos(_);
 
-);
+    average = _get_elevation_and_block_overworld(pos_nether);
 
-_raise_area(pos1, pos2, water_level) -> (
-    // for each block in the nether
-    volume(pos1, pos2,
-      position = pos(_);
-      print(player(), str('(_raise_area) position: %s, %s', position:0, position:2));
-      
-      average_level = _get_average_elevation_in_overworld(position);
-      print(player(), str('(_raise_area) final average_level: %s', average_level));
-      
-      average_level_scaled = average_level / 8;
-      print(player(), str('(_raise_area) average_level_scaled: %s', average_level_scaled));
-      
-      if (average_level_scaled >= 1,
-        print(player(), str('(SHOULD RAISE) block: %s', block(position:0, water_level + 1, position:2)));
-        set(position:0, water_level + average_level_scaled + 1, position:2, block(position:0, water_level + 1, position:2)); // later most common block
-      );
+    if (average:1 == 'water',
+      average:1 = water_block;
     );
+
+    print(player(),format('p ' + average));
+
+    // get rid of sea level water with if (> 1)
+    if (average:0 > 1,
+      // loop through column placing average block from water_level + 1 to average elevation
+      volume(pos_nether:0, pos_nether:1 + 1, pos_nether:2, pos_nether:0, pos_nether:1 + 1 + (average:0 / 8), pos_nether:2,
+        without_updates(
+          set(pos(_), average:1);
+        );
+      );
+    )
+  );
 );
 
-_get_average_elevation_in_overworld(position) -> (
-    // top left corner of a half-chunk in the overworld
-    overworld_start_pos = position * 8;
-    print(player(), str('(AVG ELEV) overworld_start_pos: %s, %s', overworld_start_pos:0, overworld_start_pos:2));
-    
-    // variable to store the average elevation of the half-chunk
-    average_level = 0;
 
-    // check each block's height above water level
-    volume(overworld_start_pos:0, 0, overworld_start_pos:2, overworld_start_pos:0 + 7, 0, overworld_start_pos:2 + 7,
+_get_elevation_and_block_overworld(pos_nether) -> (
+  // top left corner of a half-chunk in the overworld
+    overworld_start_pos = pos_nether * 8;
+
+  // variable to store the average elevation of the half-chunk
+    total_elevation = 0;
+
+  // variable to store the top blocks of the half-chunk
+    block_count_map = {};
+
+  // iterate through each column, getting elevation and block
+  volume(overworld_start_pos:0, 0, overworld_start_pos:2, overworld_start_pos:0 + 7, 0, overworld_start_pos:2 + 7,
       overworld_pos = pos(_);
-      print(player(), str('(AVG ELEV) overworld_pos: %s, %s', overworld_pos:0, overworld_pos:2));
-      
-      level_above_sea = in_dimension('overworld', top('terrain', overworld_pos)) - 63;
-      print(player(), str('(AVG ELEV) level_above_sea: %s', level_above_sea));
 
+      y_value = in_dimension('overworld', top('terrain', overworld_pos)) - 1; // top is off by 1
+      
+      // elevation
+      level_above_sea = y_value - 62;
       // remove negative values
       if (level_above_sea < 0,
         level_above_sea = 0;
       );
-
-      average_level += level_above_sea;
-      print(player(), str('(AVG ELEV) new average_level: %s', average_level));
-    );
-    print(player(), str('(AVG ELEV) final average_level: %s', average_level / 64));
-    average_level = average_level / 64;
-);
-
-_set_area(pos1, pos2, water_block) -> (
-    // for each block in the nether
-    volume(pos1, pos2,
-      position = pos(_);
-      print(player(), str('(_find_common_block) position: %s, %s', position:0, position:2));
+      total_elevation += level_above_sea;
       
-      average_block = _get_average_block_in_overworld(position);
-      print(player(), str('(_find_common_block) final average_block: %s', average_block));
-    
-      if (average_block == 'water',
-        average_block = water_block;
-      );
-
-      y_value = top('terrain', pos(_)) - 1;
-      set(position:0, y_value, position:2, average_block);
-      
-    );
-);
-
-_get_average_block_in_overworld(position) -> (
-    // top left corner of a half-chunk in the overworld
-    overworld_start_pos = position * 8;
-    print(player(), str('(AVG BLOCK) overworld_start_pos: %s, %s', overworld_start_pos:0, overworld_start_pos:2));
-    
-    // variable to store the top blocks of the half-chunk
-    block_count_map = {};
-
-    // check each of the top blocks in a chunk
-    volume(overworld_start_pos:0, 0, overworld_start_pos:2, overworld_start_pos:0 + 7, 0, overworld_start_pos:2 + 7,
-      overworld_pos = pos(_);
-      print(player(), str('(AVG BLOCK) overworld_pos: %s, %s', overworld_pos:0, overworld_pos:2));
-      
-      y_value = in_dimension('overworld', top('terrain', overworld_pos)) - 1;
+      // block id
       block_id = in_dimension('overworld',block(overworld_pos:0, y_value, overworld_pos:2));
-      
       put(block_count_map, str(block_id), get(block_count_map, str(block_id)) + 1);
     );
+
+    // average elevation
+    average_elevation = total_elevation / 64; // average it out
+    // most common block
+    most_common_block_val = max(values(block_count_map));
+    most_common_block_id = first(block_count_map, block_count_map:_ == most_common_block_val);
     
-    // return the most common block
-    print(player(), str('(AVG BLOCK) block_count_map: %s', block_count_map));
-    highest_occurence = max(values(block_count_map));
-    return_block = first(block_count_map, block_count_map:_ == highest_occurence);
-    print(player(), str('(AVG BLOCK) return_block: %s', return_block));
-    return_block;
+    print(player(),format('y ' + 
+      str('DEBUG\noverworld position: [%s, %s]\ntotal elevation: %s\naverage_elevation: %s\nblock_count_map:\n%s\nmost_common_block_count: %s\nmost_common_block_id: %s\n', overworld_pos:0, overworld_pos:2, total_elevation, average_elevation, block_count_map, most_common_block_val, most_common_block_id)));
+
+    return_block = [average_elevation, most_common_block_id];
 );
 
 
