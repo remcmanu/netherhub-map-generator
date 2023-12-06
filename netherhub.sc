@@ -85,7 +85,7 @@ _get_elevation_and_block_overworld(pos_nether) -> (
     );
 
     // average elevation
-    average_elevation = total_elevation / 64; // average it out
+    average_elevation = total_elevation / 64;
     // most common block
     most_common_block_val = max(values(block_count_map));
     most_common_block_id = first(block_count_map, block_count_map:_ == most_common_block_val);
@@ -104,8 +104,10 @@ _switch() -> (
     print(player(), str('dimension: %s', dim));
     if(
       dim == 'the_nether',
-      (run(str('execute in %s run tp %s %s %s %s', 'overworld', player(), loc:0 * 8, 150, loc:2 * 8))),
-      run(str('execute in %s run tp %s %s %s %s', 'the_nether', player(), loc:0 / 8, 210, loc:2 / 8));
+      y = ((loc:1 - 128) * 8) + 62;
+      (run(str('execute in %s run tp %s %s %s %s', 'overworld', player(), loc:0 * 8, y, loc:2 * 8))),
+      y = ((loc:1 - 62) / 8) + 128;
+      run(str('execute in %s run tp %s %s %s %s', 'the_nether', player(), loc:0 / 8, y, loc:2 / 8));
     )
 );
 
